@@ -12,3 +12,9 @@ https://github.com/ayooshkathuria/YOLO_v3_tutorial_from_scratch
 https://github.com/dotnet/TorchSharp
 
 https://github.com/dotnet/TorchSharpExamples
+
+
+!!! NOT complete, only up until training !!!
+
+!!! under review by TorchSharp Team related post !!!
+https://github.com/dotnet/TorchSharp/issues/760
