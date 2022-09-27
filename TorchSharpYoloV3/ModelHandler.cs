@@ -43,7 +43,7 @@
         {
             _model = new Model(path, _num_classes, _num_anchors, _image_size);
         }
-        public Module getModel() {
+        public Module model() {
             return _model;
         }
         public DataLoader data_loader(string root, string dataset_name, int batch_size, bool shuffle = false)

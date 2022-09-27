@@ -22,18 +22,30 @@
             
             DataLoader dataloader = mh.data_loader(root_path, data_set_name, batch_size, false);
             
-            Module md = mh.getModel();
             
-            var params0 = md.parameters();
+            var params0 = mh.model().parameters();
             var param_0_4 = params0.ToArray()[4].str();
 
             mh.SaveModel(Path.Join(root_path, data_set_name, model_weights));
 
+            Console.WriteLine("training...");
             mh.train(epochs: 10, data: dataloader, anchors: ANCHORS);
+
+            var params1 = mh.model().parameters();
+            var param_1_4 = params0.ToArray()[4].str();
 
             mh.CreateNewloadedModel(Path.Join(root_path, data_set_name, model_weights));
 
-            md = mh.getModel();
+            var params2 = mh.model().parameters();
+            var param_2_4 = params0.ToArray()[4].str();
+
+
+            Console.WriteLine(param_0_4);
+            Console.WriteLine(param_1_4);
+            Console.WriteLine(param_2_4);
+            Console.ReadLine();
+
+
 
             Console.WriteLine("Hello, World!");
         }
