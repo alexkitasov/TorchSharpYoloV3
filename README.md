@@ -10,3 +10,5 @@ https://github.com/aladdinpersson/Machine-Learning-Collection/tree/master/ML/Pyt
 https://github.com/ayooshkathuria/YOLO_v3_tutorial_from_scratch
 
 https://github.com/dotnet/TorchSharp
+
+https://github.com/dotnet/TorchSharpExamples
