@@ -18,3 +18,11 @@ https://github.com/dotnet/TorchSharpExamples
 
 !!! under review by TorchSharp Team related post !!!
 https://github.com/dotnet/TorchSharp/issues/760
+
+
+
+Update:
+evaluation and detection added.
+
+
+!!!may(almost positive) have errors!!!
