@@ -449,4 +449,8 @@
     </None>
   </ItemGroup>
 
+  <ItemGroup>
+    <Folder Include="data\Dataset1\detections\" />
+  </ItemGroup>
+
 </Project>

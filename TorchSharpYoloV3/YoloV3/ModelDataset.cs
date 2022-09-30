@@ -101,6 +101,8 @@
             }
             _data = images;
             _labels = labels;
+
+            Console.WriteLine("dataset loaded");
         }
 
 

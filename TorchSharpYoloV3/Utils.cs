@@ -2,6 +2,7 @@
 {
     using TorchSharp;
     using static TorchSharp.torch;
+    using static TorchSharp.torch.utils;
     internal static class Utils
     {
         // Intersection Over Union
@@ -101,7 +102,7 @@
         /// <param name="grid_size"></param>
         /// <param name="num_classes"></param>
         /// <returns>[N,a,s,s,classes + 5]</returns>
-        public static Tensor[] GetUnpackPredictions(Tensor output, Tensor[] scaled_anchor, int num_scales, int batch_size, int num_anchors, int[] grid_size, int num_classes) {
+        public static Tensor[] GetUnpackPredictions(Tensor output, Tensor[] scaled_anchor, int num_scales, int batch_size, int[] grid_size, int num_classes) {
             List<Tensor> pred_list = new List<Tensor>();
             int sliced = 0;
             foreach (int scale_id in Enumerable.Range(0, num_scales)) {
@@ -110,7 +111,7 @@
 
                 int slice_size =
                     batch_size
-                    * num_anchors
+                    * num_anch_per_scale
                     * grid_size[scale_id]
                     * grid_size[scale_id]
                     * (num_classes + 5);
@@ -119,7 +120,7 @@
                     = output[TensorIndex.Slice(sliced, sliced + slice_size)]
                     .reshape(
                         batch_size
-                        , num_anchors
+                        , num_anch_per_scale
                         , grid_size[scale_id]
                         , grid_size[scale_id]
                         , (num_classes + 5));
@@ -252,18 +253,18 @@
 
 
 
-            Tensor x = 1 / scale
+            Tensor x = 1.0f / (float)scale
                         * (box_prediction[
                             TensorIndex.Ellipsis,
                             TensorIndex.Slice(0, 1)]
                         + cell_indices);
-            Tensor y = 1 / scale
+            Tensor y = 1.0f / (float)scale
                         * (box_prediction[
                             TensorIndex.Ellipsis,
                             TensorIndex.Slice(1, 2)]
                         + cell_indices.permute(0, 1, 3, 2, 4));
 
-            Tensor w_h = 1 / scale 
+            Tensor w_h = 1.0f / (float)scale 
                         * box_prediction[
                             TensorIndex.Ellipsis, 
                             TensorIndex.Slice(2, 4)];
@@ -302,18 +303,18 @@
                 = torch.arange(scale).repeat(scale_data.shape[0], num_anchors, scale, 1)
                 .unsqueeze(-1).to(scale_data.device);
 
-            Tensor x = 1 / scale
+            Tensor x = 1.0f / (float)scale
                         * (box_prediction[
                             TensorIndex.Ellipsis,
                             TensorIndex.Slice(0, 1)]
                         + cell_indices);
-            Tensor y = 1 / scale
+            Tensor y = 1.0f / (float)scale
                         * (box_prediction[
                             TensorIndex.Ellipsis,
                             TensorIndex.Slice(1, 2)]
                         + cell_indices.permute(0, 1, 3, 2, 4));
 
-            Tensor w_h = 1 / scale 
+            Tensor w_h = 1.0f / (float)scale 
                         * box_prediction[
                             TensorIndex.Ellipsis, 
                             TensorIndex.Slice(2, 4)];
@@ -359,7 +360,7 @@
                     = sort_box[TensorIndex.Ellipsis, TensorIndex.Slice(0, 1)] == chosen_box[0];
                 our_class_mask = our_class_mask.repeat(new long[] { 1, 6 });
                 var our_class = sort_box[our_class_mask].reshape(-1, 6); ;                
-                // get ious of classes that higher our threshold
+                // get ious of classes that higher than our threshold
                 var our_class_iou_mask
                     = intersection_over_union(
                         our_class[TensorIndex.Ellipsis, TensorIndex.Slice(2, null)],
@@ -387,14 +388,16 @@
         /// <param name="num_class_know"></param>
         /// <param name="iou_threshold"></param>
         /// <param name="box_format"></param>
-        public static void MeanAveragePrecision(
+        public static float MeanAveragePrecision(
             Tensor pred_boxes,
             Tensor true_boxes,
             int num_class_know,
             float iou_threshold,
             BoxFormat box_format = BoxFormat.midpoint)
         {
+            var epsilon = 1e-6;
 
+            List<float> average_precisions = new List<float>();
             foreach (int c in Enumerable.Range(0, num_class_know))
             {
                 // detections of c prediction
@@ -405,76 +408,108 @@
                 // detections of c target
                 c_mask = true_boxes[TensorIndex.Ellipsis, TensorIndex.Slice(1, 2)] == c;
                 c_mask = c_mask.repeat(new long[] { 1, 7 });
-                Tensor ground_truths = true_boxes[c_mask].reshape(-1, 7);
+                Tensor ground_truths_of_c = true_boxes[c_mask].reshape(-1, 7);
 
                 // sort by best probability
                 detections_of_c = detections_of_c[
                     detections_of_c[TensorIndex.Ellipsis, 2].argsort(-1, descending: true)];
 
 
-                Tensor TP = torch.zeros(detections_of_c.shape[0]);
-                Tensor FP = torch.zeros(detections_of_c.shape[0]);
+                Tensor TruePositive = torch.zeros(detections_of_c.shape[0]);
+                Tensor FalsePositive = torch.zeros(detections_of_c.shape[0]);
 
-                int total_TRUE_boxes = (int)ground_truths.shape[0];
+                int total_TRUE_boxes = (int)ground_truths_of_c.shape[0];
 
                 if (total_TRUE_boxes == 0)
                     continue;
 
+                Dictionary<int, List<(int transact_id, int box_no)>> true_box_picked = new Dictionary<int, List<(int transact_id, int box_no)>>();
+
+
                 foreach (int dIdx in Enumerable.Range(0, (int)detections_of_c.shape[0]))
                 {
-                    c_mask = ground_truths[TensorIndex.Ellipsis, TensorIndex.Slice(0, 1)] == detections_of_c[dIdx][0];
-                    c_mask = c_mask.repeat(new long[] { 1, 7 });
-                    Tensor ground_truth_of_index = ground_truths[c_mask].reshape(-1, 7);
+                    int transaction_id = (int)detections_of_c[dIdx][0];
 
-                    int no_gts = (int)ground_truth_of_index.shape[0];
+                    Tensor transaction_mask = ground_truths_of_c[TensorIndex.Ellipsis, TensorIndex.Slice(0, 1)] == transaction_id;
+                    transaction_mask = transaction_mask.repeat(new long[] { 1, 7 });
+                    Tensor ground_truths_of_transaction = ground_truths_of_c[transaction_mask].reshape(-1, 7);
+
+                    int no_gts = (int)ground_truths_of_transaction.shape[0];
                     float best_iou = 0;
-                    foreach (int gt in Enumerable.Range(0, (int)ground_truth_of_index.shape[0])) {
-
+                    int best_index_of_iou = -1;
+                    foreach (int gt in Enumerable.Range(0, no_gts)) {
                         Tensor iou
                             = intersection_over_union(
-                                detections_of_c[dIdx][TensorIndex.Slice(3, null)],
-                                ground_truth_of_index[gt][TensorIndex.Slice(3, null)],
-                                box_format
-                                );
+                                    detections_of_c[dIdx][TensorIndex.Slice(3, null)],
+                                    ground_truths_of_transaction[gt][TensorIndex.Slice(3, null)],
+                                    box_format);
 
                         if ((float)iou > best_iou) {
                             best_iou = (float)iou;
+                            best_index_of_iou = gt;
                         }
-                    
-                    
                     }
-
-
+                    if (best_iou > iou_threshold)
+                    {
+                        if (true_box_picked.get_List_Of_Picked(c).Contains((transaction_id, best_index_of_iou)))
+                        {
+                            FalsePositive[dIdx] = 1;
+                        }
+                        else {
+                            TruePositive[dIdx] = 1;
+                            true_box_picked.get_List_Of_Picked(c).Add((transaction_id, best_index_of_iou));
+                        }
+                    }
+                    else {
+                        FalsePositive[dIdx] = 1;
+                    }
                 }
 
+                Tensor TP_cumsum = torch.cumsum(TruePositive, dimension: 0);
+                Tensor FP_cumsum = torch.cumsum(FalsePositive, dimension: 0);
+                Tensor recalls = TP_cumsum / (total_TRUE_boxes + epsilon);
+                Tensor precisions = TP_cumsum / (TP_cumsum + FP_cumsum + epsilon);
+                // calculate trapizoid ###########################################
+                //
+                //    n-1
+                //   _____
+                //   \         (  Xi - X(i-1) )  x ( Yi + Y(i-1) )
+                //    \       __________________________________________ 
+                //    /                          2
+                //   /____      
+                //
+                //    i=1
+                //################################################################
+                Tensor y = precisions;
+                Tensor x = recalls;
 
+                Tensor x_i = x[TensorIndex.Slice(1,null)];
+                Tensor x_i_1 = x[TensorIndex.Slice(0, x_i.size(0))];
 
+                Tensor y_i = y[TensorIndex.Slice(1, null)];
+                Tensor y_i_1 = y[TensorIndex.Slice(0, x_i.size(0))];
 
+                Tensor xy = ((x_i - x_i_1) * (y_i + y_i_1)) / 2;
 
+                float sum_all = (float)xy.sum();
+
+                average_precisions.Add(sum_all);
+                
             }
-            throw new Exception("MeanAveragePrecision is not finished");
+            return average_precisions.Sum() / average_precisions.Count();
         }
 
-        /// <summary>
-        /// Dictionary extension method
-        /// </summary>
-        /// <param name="block"></param>
-        /// <param name="key"></param>
-        /// <returns></returns>
-        public static string kval(this Dictionary<string, object> block, string key, string default_value = "")
+
+
+        private static List<(int transact_id, int box_no)> get_List_Of_Picked(this Dictionary<int, List<(int transact_id, int box_no)>> true_box_picked, int class_id)
         {
-            block.TryGetValue(key, out var value);
+            true_box_picked.TryGetValue(class_id, out var value);
             if (value is null)
-                return default_value;
+                return new List<(int transact_id, int box_no)>();
             if (value.ToString() is null)
-                return "";
-            return (value.ToString() ?? "").ToLower();
+                return new List<(int transact_id, int box_no)>();
+            return value;
         }
-
-
-
-
-
 
     }
 }
