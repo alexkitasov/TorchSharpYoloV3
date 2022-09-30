@@ -4,6 +4,7 @@ Yolo V3 with TorchSharp C# .NET6
 
 A lot of help from:
 
+https://arxiv.org/abs/1804.02767
 
 https://github.com/aladdinpersson/Machine-Learning-Collection/tree/master/ML/Pytorch/object_detection/YOLOv3
 
